@@ -386,6 +386,7 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
+    #ifdef DEFAULT
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
@@ -393,17 +394,45 @@ scheduler(void)
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
-      c->proc = p;
+      proc = p;
       switchuvm(p);
       p->state = RUNNING;
-
-      swtch(&(c->scheduler), p->context);
+      swtch(&cpu->scheduler, proc->context);
       switchkvm();
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
-      c->proc = 0;
+      proc = 0;
     }
+
+    #else
+
+     #ifdef FCFS
+        struct proc *minP = NULL;
+        for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+          if(p->state == RUNNABLE){
+            if (minP!=NULL){
+              if(p->ctime < minP->ctime)
+                minP = p;
+            }
+            else
+              minP = p;
+          }
+        }
+        if (minP!=NULL){
+          p = minP;//the process with the smallest creation time
+          proc = p;
+          switchuvm(p);
+          p->state = RUNNING;
+          swtch(&cpu->scheduler, proc->context);
+          switchkvm();
+          // Process is done running for now.
+          // It should have changed its p->state before coming back.
+           proc = 0;
+       }
+    
+    #endif
+
     release(&ptable.lock);
 
   }
