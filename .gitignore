@@ -1,11 +1,12 @@
 *.o
 *.d
 *.asm
+*.sym
+.vscode/
 bootblock
 entryother
 initcode
 initcode.out
 kernel
-kernel.sym
 vectors.S
 xv6.img
