@@ -406,6 +406,7 @@ void scheduler(void)
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
 #ifdef DEFAULT
+    cprintf("DEFAULT RR\n");
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
       if (p->state != RUNNABLE)
@@ -428,6 +429,7 @@ void scheduler(void)
 #else
 
 #ifdef FCFS
+    // cprintf("FCFS\n");
     struct proc *minP = 0;
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {

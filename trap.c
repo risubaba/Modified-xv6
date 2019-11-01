@@ -47,7 +47,7 @@ void trap(struct trapframe *tf)
   switch (tf->trapno)
   {
   case T_IRQ0 + IRQ_TIMER:
-    if (cpuid()==0)
+    if (cpuid() == 0)
     {
       acquire(&tickslock);
       ticks++;
@@ -59,9 +59,9 @@ void trap(struct trapframe *tf)
         // cprintf("%d\n", myproc()->rtime);
         // myproc()->rtime++;
         if (myproc()->state == RUNNING)
-        myproc()->rtime++;
+          myproc()->rtime++;
         else if (myproc()->state == SLEEPING)
-        myproc()->iotime++;
+          myproc()->iotime++;
       }
     }
     lapiceoi();
@@ -115,7 +115,12 @@ void trap(struct trapframe *tf)
   // If interrupts were on while locks held, would need to check nlock.
   if (myproc() && myproc()->state == RUNNING &&
       tf->trapno == T_IRQ0 + IRQ_TIMER)
+  {
+#ifdef FCFS
+#else
     yield();
+#endif
+  }
 
   // Check if the process has been killed since we yielded
   if (myproc() && myproc()->killed && (tf->cs & 3) == DPL_USER)
