@@ -6,7 +6,7 @@
 bootblock
 entryother
 initcode
-initcode.out
+initcode.out    
 kernel
 vectors.S
 xv6.img

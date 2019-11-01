@@ -362,6 +362,10 @@ int waitx(int *wtime, int *rtime)
         p->name[0] = 0;
         p->killed = 0;
         p->state = UNUSED;
+        p->etime = 0;
+        p->ctime = 0;
+        p->rtime = 0;
+        p->iotime = 0;
         release(&ptable.lock);
         return pid;
       }
@@ -370,6 +374,7 @@ int waitx(int *wtime, int *rtime)
     // No point waiting if we don't have any children.
     if (!havekids || curproc->killed)
     {
+      *rtime = 0, *wtime = 0;
       release(&ptable.lock);
       return -1;
     }
