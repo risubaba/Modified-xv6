@@ -406,7 +406,7 @@ void scheduler(void)
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
 #ifdef DEFAULT
-    cprintf("DEFAULT RR\n");
+    // cprintf("DEFAULT RR\n");
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
       if (p->state != RUNNABLE)
@@ -430,23 +430,24 @@ void scheduler(void)
 
 #ifdef FCFS
     // cprintf("FCFS\n");
-    struct proc *minP = 0;
+    struct proc *min = 0;
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
       if (p->state == RUNNABLE)
       {
-        if (minP != 0)
+        if (min != 0)
         {
-          if (p->ctime < minP->ctime)
-            minP = p;
+          if (p->ctime < min->ctime)
+            min = p;
         }
         else
-          minP = p;
+          min = p;
       }
     }
-    if (minP != 0)
+    if (min != 0)
     {
-      p = minP; //the process with the smallest creation time
+      cprintf("Process %s with creation time %d chosen\n",min->name,min->ctime);
+      p = min; //the process with the smallest creation time
       cpu->proc = p;
       switchuvm(p);
       p->state = RUNNING;
