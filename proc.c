@@ -120,6 +120,7 @@ found:
   p->etime = 0;
   p->rtime = 0;
   p->iotime = 0;
+  p->priority = 60;
   release(&tickslock);
 
   return p;
@@ -384,6 +385,23 @@ int waitx(int *wtime, int *rtime)
   }
 }
 
+int set_priority(int priority)
+{
+  int yield_flag = 0;
+  struct proc *p = myproc();
+  acquire(&ptable.lock);
+  int ret = p->priority;
+  p->priority = priority;
+  cprintf("Changed priority of process %d to %d\n", p->pid, priority);
+  if (ret < p->priority)
+    yield_flag = 1;
+  release(&ptable.lock);
+  if (yield_flag){
+    yield();
+  }
+  return ret;
+}
+
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -433,6 +451,7 @@ void scheduler(void)
     struct proc *min = 0;
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
+      // select the proc with min creation time
       if (p->state == RUNNABLE)
       {
         if (min != 0)
@@ -444,9 +463,10 @@ void scheduler(void)
           min = p;
       }
     }
+    //run the process with min creation time
     if (min != 0)
     {
-      cprintf("Process %s with creation time %d chosen\n",min->name,min->ctime);
+      cprintf("Process %s with creation time %d chosen\n", min->name, min->ctime);
       p = min; //the process with the smallest creation time
       cpu->proc = p;
       switchuvm(p);
@@ -457,7 +477,37 @@ void scheduler(void)
       // It should have changed its p->state before coming back.
       cpu->proc = 0;
     }
+#else
+#ifdef PBS
+    int max_priority = 0;
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    {
+      // select the max priority
+      if (p->state == RUNNABLE)
+      {
+        max_priority = max_priority > p->priority ? max_priority : p->priority;
+      }
+    }
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    {
+      if (p->state != RUNNABLE || p->priority != max_priority)
+        continue;
 
+      cprintf("max_priority chosen is %d\n", max_priority);
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      cpu->proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+      swtch(&cpu->scheduler, p->context);
+      switchkvm();
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      cpu->proc = 0;
+    }
+#endif
 #endif
 #endif
 

@@ -84,6 +84,15 @@ int sys_uptime(void)
   return xticks;
 }
 
+int sys_set_priority(void)
+{
+  int priority;
+  if (argint(0, &priority) < 0)
+    return -1;
+  return set_priority(priority);
+
+}
+
 int sys_waitx(void)
 {
   int *wtime;
@@ -94,5 +103,5 @@ int sys_waitx(void)
 
   if (argptr(1, (char **)&rtime, sizeof(int)) < 0)
     return -1;
-  return waitx(wtime,rtime);
+  return waitx(wtime, rtime);
 }

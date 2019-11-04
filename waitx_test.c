@@ -12,6 +12,7 @@ int main(int argc, char *argv[])
         status = 0;
         if (pid == 0)
         {
+            set_priority(j*10+1);
             for (volatile int i = 0; i < 100000000; i++)
                 status = 1 ^ status;
             exit();
@@ -20,7 +21,7 @@ int main(int argc, char *argv[])
         {
             status = waitx(&a, &b);
         }
-        printf(1, "Wait Time = %d\n Run Time = %d with Status %d \n", a, b, status);
+        // printf(1, "Wait Time = %d\n Run Time = %d with Status %d \n", a, b, status);
     }
     exit();
 }

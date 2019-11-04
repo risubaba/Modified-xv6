@@ -55,6 +55,7 @@ struct proc {
   int etime;                   // End time of process
   int rtime;                   // Total run time of process
   int iotime;                 // Time for i/o 
+  int priority;
 };
 
 // Process memory is laid out contiguously, low addresses first:
