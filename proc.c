@@ -396,10 +396,39 @@ int set_priority(int priority)
   if (ret < p->priority)
     yield_flag = 1;
   release(&ptable.lock);
-  if (yield_flag){
+  if (yield_flag)
+  {
     yield();
   }
   return ret;
+}
+
+char* val(int state)
+{
+  switch(state)
+  {
+    case 1: return "UNUSED";
+    case 2: return "EMBRYO";
+    case 3: return "SLEEPING";
+    case 4: return "RUNNABLE";
+    case 5: return "RUNNING";
+    case 6: return "ZOMBIE";
+  }
+  return "ERROR";
+}
+
+int ps(void)
+{
+  struct proc *p;
+  cprintf("\n\nPID     NAME     STATE     PRIORITY \n");
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  {
+    if (p->pid!=0)
+    cprintf(" %d     %s     %s     %d\n", p->pid,p->name,val(p->state),p->priority);
+  }
+  cprintf("\n\n");
+
+  return 1;
 }
 
 //PAGEBREAK: 42
@@ -493,7 +522,7 @@ void scheduler(void)
       if (p->state != RUNNABLE || p->priority != max_priority)
         continue;
 
-      cprintf("max_priority chosen is %d\n", max_priority);
+      // cprintf("max_priority chosen is %d\n", max_priority);
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
