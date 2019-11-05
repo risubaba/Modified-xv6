@@ -518,7 +518,7 @@ void scheduler(void)
     }
 #else
 #ifdef PBS
-    int max_priority = 0;
+    int max_priority = 500;
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
       // select the max priority
@@ -543,8 +543,8 @@ void scheduler(void)
       switchkvm();
       if (p->state == RUNNABLE)
       {
-        //proccess exited due to change in priority
-        //rerun the scheduler
+      //   //proccess exited due to change in priority
+      //   //rerun the scheduler
         break;
       }
       // Process is done running for now.
