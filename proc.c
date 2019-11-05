@@ -13,6 +13,14 @@ struct
   struct proc proc[NPROC];
 } ptable;
 
+struct 
+{
+  struct spinlock lock;
+  struct proc proc[NPROC];
+} proc_queue[5];
+
+int tail[5],head[5];
+
 static struct proc *initproc;
 
 int nextpid = 1;
@@ -24,6 +32,8 @@ static void wakeup1(void *chan);
 void pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+  for (int i=0;i<5;i++)
+    initlock(&proc_queue[i].lock, "proc_queue");
 }
 
 // Must be called with interrupts disabled
@@ -393,7 +403,7 @@ int set_priority(int priority)
   int ret = p->priority;
   p->priority = priority;
   cprintf("Changed priority of process %d to %d\n", p->pid, priority);
-  if (ret < p->priority)
+  if (ret > p->priority)
     yield_flag = 1;
   release(&ptable.lock);
   if (yield_flag)
@@ -514,7 +524,7 @@ void scheduler(void)
       // select the max priority
       if (p->state == RUNNABLE)
       {
-        max_priority = max_priority > p->priority ? max_priority : p->priority;
+        max_priority = max_priority < p->priority ? max_priority : p->priority;
       }
     }
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
@@ -531,11 +541,20 @@ void scheduler(void)
       p->state = RUNNING;
       swtch(&cpu->scheduler, p->context);
       switchkvm();
-
+      if (p->state == RUNNABLE)
+      {
+        //proccess exited due to change in priority
+        //rerun the scheduler
+        break;
+      }
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       cpu->proc = 0;
     }
+#else
+// #ifdef MLFQ
+
+// #endif
 #endif
 #endif
 #endif

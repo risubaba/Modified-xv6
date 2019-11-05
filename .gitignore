@@ -10,4 +10,3 @@ initcode.out
 kernel
 vectors.S
 xv6.img
-*_
