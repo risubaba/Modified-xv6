@@ -26,16 +26,16 @@ static struct proc *initproc;
 int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
-
 static void wakeup1(void *chan);
 
 void pinit(void)
 {
   initlock(&ptable.lock, "ptable");
-  for (int i = 0; i < 5; i++){
+  for (int i = 0; i < 5; i++)
+  {
     char lock_name[12] = "proc_queue";
-    lock_name[10]=i+'0'; 
-    initlock(&proc_queue[i].lock,lock_name);
+    lock_name[10] = i + '0';
+    initlock(&proc_queue[i].lock, lock_name);
   }
 }
 
@@ -136,13 +136,13 @@ found:
   p->iotime = 0;
   p->priority = 60;
   p->queue = 0;
-// #ifdef MLFQ
+  // #ifdef MLFQ
   //add to the end of queue 0
   acquire(&proc_queue[0].lock);
   proc_queue[0].proc[tail[0]] = *p;
   tail[0]++;
   release(&proc_queue[0].lock);
-// #endif
+  // #endif
   return p;
 }
 
@@ -181,6 +181,11 @@ void userinit(void)
   p->state = RUNNABLE;
 
   release(&ptable.lock);
+
+  acquire(&proc_queue[0].lock);
+  proc_queue[0].proc[tail[0]] = *p;
+  tail[0]++;
+  release(&proc_queue[0].lock);
 }
 
 // Grow current process's memory by n bytes.
@@ -251,6 +256,11 @@ int fork(void)
 
   release(&ptable.lock);
 
+  acquire(&proc_queue[0].lock);
+  proc_queue[0].proc[tail[0]] = *np;
+  tail[0]++;
+  release(&proc_queue[0].lock);
+
   return pid;
 }
 
@@ -284,6 +294,7 @@ void exit(void)
   acquire(&ptable.lock);
 
   // Parent might be sleeping in wait().
+  cprintf("Ye kyu hi hoega abhi\n");
   wakeup1(curproc->parent);
 
   // Pass abandoned children to init.
@@ -429,17 +440,17 @@ char *val(int state)
 {
   switch (state)
   {
-  case 1:
+  case 0:
     return "UNUSED";
-  case 2:
+  case 1:
     return "EMBRYO";
-  case 3:
+  case 2:
     return "SLEEPING";
-  case 4:
+  case 3:
     return "RUNNABLE";
-  case 5:
+  case 4:
     return "RUNNING";
-  case 6:
+  case 5:
     return "ZOMBIE";
   }
   return "ERROR";
@@ -472,7 +483,6 @@ void scheduler(void)
   struct proc *p;
   struct cpu *cpu = mycpu();
   cpu->proc = 0;
-
   for (;;)
   {
     // Enable interrupts on this processor.
@@ -490,11 +500,15 @@ void scheduler(void)
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
+      if (p->pid == 1)
+        cprintf("running init at state %d\n", p->state);
       cpu->proc = p;
       switchuvm(p);
       p->state = RUNNING;
       swtch(&cpu->scheduler, p->context);
       switchkvm();
+      if (p->pid == 1)
+        cprintf("State of init is %d\n", p->state);
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
@@ -547,7 +561,7 @@ void scheduler(void)
     }
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
-      if (p->state != RUNNABLE && p->priority != max_priority)
+      if (p->state != RUNNABLE || p->priority != max_priority)
         continue;
 
       // cprintf("max_priority chosen is %d\n", max_priority);
@@ -576,26 +590,55 @@ void scheduler(void)
     {
       int proc_found = 0;
       acquire(&proc_queue[j].lock);
-      for (p = proc_queue[j].proc; p < &proc_queue[j].proc[NPROC]; p++)
-      {
-        if (p->state != RUNNABLE || p->queue != -1)
-          continue;
-        else
+      if (j == 0)
+        for (p = proc_queue[j].proc; p < &proc_queue[j].proc[NPROC]; p++)
         {
-          cur_table = j;
-          proc_found = 1;
-          break;
+          // cprintf("State of process with pid %d is %d at queue %d\n", p->pid, p->state, p->queue);
+          if (p->state != RUNNABLE || p->queue == -1)
+          {
+            // if (p->state==3)
+            // cprintf("IDHAR KYU BC\n");
+            continue;
+          }
+          else
+          {
+            // cprintf("SIZE OF %dth queue is %d\n", j, tail[j]);
+            cur_table = j;
+            proc_found = 1;
+            break;
+          }
         }
-      }
       release(&proc_queue[j].lock);
-      if (proc_found == 1){
+      if (proc_found == 1)
+      {
         break;
       }
     }
-    if (cur_table!=-1)
+    int index = 0;
+    for (p = proc_queue[cur_table].proc; p < &proc_queue[cur_table].proc[NPROC]; p++)
     {
-      cprintf("Table number is %d\n",cur_table);
+      if (p->state != RUNNABLE)
+        continue;
+
+      index++;
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      // cprintf("Index is %d\n",index);
+      // cprintf("process to run found with pid %d\n",p->pid);
+      cpu->proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+      swtch(&cpu->scheduler, p->context);
+      switchkvm();
+      // cprintf("process to run found with pid %d\n",p->pid);
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      cpu->proc = 0;
     }
+    // if (index != 0)
+      // cprintf("\n");
 #endif
 #endif
 #endif
@@ -711,6 +754,12 @@ wakeup1(void *chan)
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if (p->state == SLEEPING && p->chan == chan)
       p->state = RUNNABLE;
+  for (int i = 0; i < 5; i++)
+  {
+    for (p = proc_queue[i].proc; p < &proc_queue[i].proc[NPROC]; p++)
+      if (p->state == SLEEPING && p->chan == chan)
+        p->state = RUNNABLE;
+  }
 }
 
 // Wake up all processes sleeping on chan.
