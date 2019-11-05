@@ -298,6 +298,20 @@ void exit(void)
   wakeup1(curproc->parent);
 
   // Pass abandoned children to init.
+#ifdef MLFQ
+  for (int i = 0; i < 5; i++)
+  {
+    for (p = proc_queue[i].proc; p < &proc_queue[i].proc[NPROC]; p++)
+    {
+      if (p->parent == curproc)
+      {
+        p->parent = initproc;
+        if (p->state == ZOMBIE)
+          wakeup1(initproc);
+      }
+    }
+  }
+#else
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
   {
     if (p->parent == curproc)
@@ -307,7 +321,7 @@ void exit(void)
         wakeup1(initproc);
     }
   }
-
+#endif
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
   acquire(&tickslock);
@@ -549,7 +563,7 @@ void scheduler(void)
       cpu->proc = 0;
     }
 #else
-#ifdef MLFQ
+#ifdef PBS
     int max_priority = 500;
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
@@ -584,7 +598,7 @@ void scheduler(void)
       cpu->proc = 0;
     }
 #else
-#ifdef MLFQQ
+#ifdef MLFQ
     int cur_table = -1;
     for (int j = 0; j < 5; j++)
     {
@@ -638,7 +652,7 @@ void scheduler(void)
       cpu->proc = 0;
     }
     // if (index != 0)
-      // cprintf("\n");
+    // cprintf("\n");
 #endif
 #endif
 #endif
@@ -750,10 +764,7 @@ static void
 wakeup1(void *chan)
 {
   struct proc *p;
-
-  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if (p->state == SLEEPING && p->chan == chan)
-      p->state = RUNNABLE;
+#ifdef MLFQ
   for (int i = 0; i < 5; i++)
   {
     for (p = proc_queue[i].proc; p < &proc_queue[i].proc[NPROC]; p++)
@@ -761,7 +772,13 @@ wakeup1(void *chan)
         p->state = RUNNABLE;
   }
 }
+#else
 
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    if (p->state == SLEEPING && p->chan == chan)
+      p->state = RUNNABLE;
+#endif
+}
 // Wake up all processes sleeping on chan.
 void wakeup(void *chan)
 {
@@ -830,3 +847,6 @@ void procdump(void)
     cprintf("\n");
   }
 }
+
+
+//reset to sh after child process finishes
