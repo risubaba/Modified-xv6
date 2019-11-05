@@ -13,13 +13,13 @@ struct
   struct proc proc[NPROC];
 } ptable;
 
-struct 
+struct
 {
   struct spinlock lock;
   struct proc proc[NPROC];
 } proc_queue[5];
 
-int tail[5],head[5];
+int tail[5], head[5];
 
 static struct proc *initproc;
 
@@ -32,8 +32,11 @@ static void wakeup1(void *chan);
 void pinit(void)
 {
   initlock(&ptable.lock, "ptable");
-  for (int i=0;i<5;i++)
-    initlock(&proc_queue[i].lock, "proc_queue");
+  for (int i = 0; i < 5; i++){
+    char lock_name[12] = "proc_queue";
+    lock_name[10]=i+'0'; 
+    initlock(&proc_queue[i].lock,lock_name);
+  }
 }
 
 // Must be called with interrupts disabled
@@ -124,15 +127,22 @@ found:
   p->context = (struct context *)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
-  acquire(&tickslock);
   //lock to prevent ticks from changing
+  acquire(&tickslock);
   p->ctime = ticks;
+  release(&tickslock);
   p->etime = 0;
   p->rtime = 0;
   p->iotime = 0;
   p->priority = 60;
-  release(&tickslock);
-
+  p->queue = 0;
+// #ifdef MLFQ
+  //add to the end of queue 0
+  acquire(&proc_queue[0].lock);
+  proc_queue[0].proc[tail[0]] = *p;
+  tail[0]++;
+  release(&proc_queue[0].lock);
+// #endif
   return p;
 }
 
@@ -325,6 +335,7 @@ int wait(void)
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
+        p->queue = -1;
         p->state = UNUSED;
         release(&ptable.lock);
         return pid;
@@ -377,6 +388,7 @@ int waitx(int *wtime, int *rtime)
         p->ctime = 0;
         p->rtime = 0;
         p->iotime = 0;
+        p->queue = -1;
         release(&ptable.lock);
         return pid;
       }
@@ -413,16 +425,22 @@ int set_priority(int priority)
   return ret;
 }
 
-char* val(int state)
+char *val(int state)
 {
-  switch(state)
+  switch (state)
   {
-    case 1: return "UNUSED";
-    case 2: return "EMBRYO";
-    case 3: return "SLEEPING";
-    case 4: return "RUNNABLE";
-    case 5: return "RUNNING";
-    case 6: return "ZOMBIE";
+  case 1:
+    return "UNUSED";
+  case 2:
+    return "EMBRYO";
+  case 3:
+    return "SLEEPING";
+  case 4:
+    return "RUNNABLE";
+  case 5:
+    return "RUNNING";
+  case 6:
+    return "ZOMBIE";
   }
   return "ERROR";
 }
@@ -433,8 +451,8 @@ int ps(void)
   cprintf("\n\nPID     NAME     STATE     PRIORITY \n");
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
   {
-    if (p->pid!=0)
-    cprintf(" %d     %s     %s     %d\n", p->pid,p->name,val(p->state),p->priority);
+    if (p->pid != 0)
+      cprintf(" %d     %s     %s     %d\n", p->pid, p->name, val(p->state), p->priority);
   }
   cprintf("\n\n");
 
@@ -517,7 +535,7 @@ void scheduler(void)
       cpu->proc = 0;
     }
 #else
-#ifdef PBS
+#ifdef MLFQ
     int max_priority = 500;
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
@@ -529,7 +547,7 @@ void scheduler(void)
     }
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
-      if (p->state != RUNNABLE || p->priority != max_priority)
+      if (p->state != RUNNABLE && p->priority != max_priority)
         continue;
 
       // cprintf("max_priority chosen is %d\n", max_priority);
@@ -543,8 +561,8 @@ void scheduler(void)
       switchkvm();
       if (p->state == RUNNABLE)
       {
-      //   //proccess exited due to change in priority
-      //   //rerun the scheduler
+        //   //proccess exited due to change in priority
+        //   //rerun the scheduler
         break;
       }
       // Process is done running for now.
@@ -552,9 +570,33 @@ void scheduler(void)
       cpu->proc = 0;
     }
 #else
-// #ifdef MLFQ
-
-// #endif
+#ifdef MLFQQ
+    int cur_table = -1;
+    for (int j = 0; j < 5; j++)
+    {
+      int proc_found = 0;
+      acquire(&proc_queue[j].lock);
+      for (p = proc_queue[j].proc; p < &proc_queue[j].proc[NPROC]; p++)
+      {
+        if (p->state != RUNNABLE || p->queue != -1)
+          continue;
+        else
+        {
+          cur_table = j;
+          proc_found = 1;
+          break;
+        }
+      }
+      release(&proc_queue[j].lock);
+      if (proc_found == 1){
+        break;
+      }
+    }
+    if (cur_table!=-1)
+    {
+      cprintf("Table number is %d\n",cur_table);
+    }
+#endif
 #endif
 #endif
 #endif
