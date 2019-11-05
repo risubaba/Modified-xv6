@@ -270,6 +270,7 @@ int fork(void)
 void exit(void)
 {
   struct proc *curproc = myproc();
+  cprintf("CURPROC IS %s\n", curproc->name);
   struct proc *p;
   int fd;
 
@@ -296,7 +297,6 @@ void exit(void)
   // Parent might be sleeping in wait().
   cprintf("Ye kyu hi hoega abhi\n");
   wakeup1(curproc->parent);
-
   // Pass abandoned children to init.
 #ifdef MLFQ
   for (int i = 0; i < 5; i++)
@@ -307,7 +307,10 @@ void exit(void)
       {
         p->parent = initproc;
         if (p->state == ZOMBIE)
+        {
+          cprintf("dsijdasidjsao\n");
           wakeup1(initproc);
+        }
       }
     }
   }
@@ -318,7 +321,10 @@ void exit(void)
     {
       p->parent = initproc;
       if (p->state == ZOMBIE)
+      {
+        cprintf("dsijdasidjsao\n");
         wakeup1(initproc);
+      }
     }
   }
 #endif
@@ -327,6 +333,7 @@ void exit(void)
   acquire(&tickslock);
   curproc->etime = ticks;
   release(&tickslock);
+  cprintf("EXITING FROM EXIT\n");
   sched();
   panic("zombie exit");
 }
@@ -514,15 +521,11 @@ void scheduler(void)
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
-      if (p->pid == 1)
-        cprintf("running init at state %d\n", p->state);
       cpu->proc = p;
       switchuvm(p);
       p->state = RUNNING;
       swtch(&cpu->scheduler, p->context);
       switchkvm();
-      if (p->pid == 1)
-        cprintf("State of init is %d\n", p->state);
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
@@ -578,7 +581,7 @@ void scheduler(void)
       if (p->state != RUNNABLE || p->priority != max_priority)
         continue;
 
-      // cprintf("max_priority chosen is %d\n", max_priority);
+      cprintf("max_priority chosen is %d with pid %d\n", max_priority, p->pid);
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
@@ -616,7 +619,7 @@ void scheduler(void)
           }
           else
           {
-            // cprintf("SIZE OF %dth queue is %d\n", j, tail[j]);
+            // cprintf("Process found has pid %d\n",p->pid);
             cur_table = j;
             proc_found = 1;
             break;
@@ -625,6 +628,7 @@ void scheduler(void)
       release(&proc_queue[j].lock);
       if (proc_found == 1)
       {
+        cprintf("PROC FOUND\n");
         break;
       }
     }
@@ -639,12 +643,15 @@ void scheduler(void)
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
       // cprintf("Index is %d\n",index);
-      // cprintf("process to run found with pid %d\n",p->pid);
+      cprintf("process to run found with pid %d\n",p->pid);
       cpu->proc = p;
       switchuvm(p);
       p->state = RUNNING;
       swtch(&cpu->scheduler, p->context);
       switchkvm();
+      cprintf("IDHAR REEEE\n");
+      cprintf("Process is now in state %d\n",p->state);
+      if (p->state == ZOMBIE) cprintf("PROCESS FINISHED\n");
       // cprintf("process to run found with pid %d\n",p->pid);
 
       // Process is done running for now.
@@ -771,9 +778,7 @@ wakeup1(void *chan)
       if (p->state == SLEEPING && p->chan == chan)
         p->state = RUNNABLE;
   }
-}
 #else
-
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if (p->state == SLEEPING && p->chan == chan)
       p->state = RUNNABLE;
@@ -847,6 +852,5 @@ void procdump(void)
     cprintf("\n");
   }
 }
-
 
 //reset to sh after child process finishes

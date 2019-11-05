@@ -19,7 +19,7 @@ int main(int argc, char *argv[])
             if (pid == 0)
             {
                 set_priority(j * 10 + 1);
-                for (volatile int i = 0; i < 1000000000; i++)
+                for (volatile int i = 0; i < 1000000; i++)
                     status = 1 ^ status;
                 exit();
             }
