@@ -18,6 +18,12 @@ int ticksforqq[5] = {1, 2, 4, 8, 16};
 //MLFQ FUNCTIONS
 int tail[5];
 
+void pinit(void)
+{
+  initlock(&ptable.lock, "ptable");
+  for (int i=0;i<5;i++) tails[i]=0;
+}
+
 void add_to_queue(int queue, struct proc *p)
 {
   //check if process already exists
@@ -67,10 +73,7 @@ extern void forkret(void);
 extern void trapret(void);
 static void wakeup1(void *chan);
 
-void pinit(void)
-{
-  initlock(&ptable.lock, "ptable");
-}
+
 
 // Must be called with interrupts disabled
 int cpuid()
@@ -172,9 +175,9 @@ found:
   for (int i = 0; i < 5; i++)
     p->ticksinq[i] = 0;
   p->lcheck = ticks;
-#ifdef MLFQ
-  add_to_queue(0, p);
-#endif
+// #ifdef MLFQ
+//   add_to_queue(0, p);
+// #endif
   return p;
 }
 
@@ -210,6 +213,7 @@ void userinit(void)
   // because the assignment might not be atomic.
   acquire(&ptable.lock);
   p->state = RUNNABLE;
+  add_to_queue(0,p);
   release(&ptable.lock);
 }
 
@@ -638,6 +642,7 @@ void scheduler(void)
       swtch(&cpu->scheduler, p->context);
       switchkvm();
       cpu->proc = 0;
+      //shift this to yield
       if (p->state == RUNNABLE && p->demote == 1)
       {
         p->lcheck = ticks;
@@ -813,7 +818,7 @@ int kill(int pid)
       if (p->state == SLEEPING)
       {
         p->state = RUNNABLE;
-        add_to_queue(0, p);
+        add_to_queue(p->queue, p);
       }
       release(&ptable.lock);
       return 0;
