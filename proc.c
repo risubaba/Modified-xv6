@@ -540,6 +540,7 @@ void scheduler(void)
       switchuvm(p);
       p->state = RUNNING;
       swtch(&cpu->scheduler, p->context);
+      
       switchkvm();
       if (p->state == RUNNABLE)
       {
