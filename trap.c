@@ -14,6 +14,7 @@ extern uint vectors[]; // in vectors.S: array of 256 entry pointers
 struct spinlock tickslock;
 uint ticks;
 
+int ticksforq[5] = {1, 2, 4, 8, 16};
 void tvinit(void)
 {
   int i;
@@ -36,11 +37,17 @@ void trap(struct trapframe *tf)
   if (tf->trapno == T_SYSCALL)
   {
     if (myproc()->killed)
+    {
+      // cprintf("Exiting in trap.c\n");
       exit();
+    }
     myproc()->tf = tf;
     syscall();
     if (myproc()->killed)
+    {
+      // cprintf("Exiting in trap.c\n");
       exit();
+    }
     return;
   }
 
@@ -109,7 +116,10 @@ void trap(struct trapframe *tf)
   // (If it is still executing in the kernel, let it keep running
   // until it gets to the regular system call return.)
   if (myproc() && myproc()->killed && (tf->cs & 3) == DPL_USER)
+  {
+    // cprintf("Exiting %d\n", myproc()->name);
     exit();
+  }
 
   // Force process to give up CPU on clock tick.
   // If interrupts were on while locks held, would need to check nlock.
@@ -118,11 +128,25 @@ void trap(struct trapframe *tf)
   {
 #ifdef FCFS
 #else
+#ifdef MLFQ
+    struct proc *p = myproc();
+    p->ticksinq[p->queue]++;
+    if (ticks - p->lcheck >= ticksforq[p->queue])
+    {
+      p->demote = 1;
+    }
     yield();
+
+#else
+    yield();
+#endif
 #endif
   }
 
   // Check if the process has been killed since we yielded
   if (myproc() && myproc()->killed && (tf->cs & 3) == DPL_USER)
+  {
+    // cprintf("Exiting %d\n", myproc()->name);
     exit();
+  }
 }
