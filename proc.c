@@ -13,13 +13,52 @@ struct
   struct proc proc[NPROC];
 } ptable;
 
-struct
-{
-  struct spinlock lock;
-  struct proc proc[NPROC];
-} proc_queue[5];
+struct proc *proc_queue[5][NPROC];
+int ticksforqq[5] = {1, 2, 4, 8, 16};
+//MLFQ FUNCTIONS
+int tail[5];
 
-int tail[5], head[5];
+void add_to_queue(int queue, struct proc *p)
+{
+  //check if process already exists
+  for (int i = 0; i < tail[queue]; i++)
+  {
+    struct proc *q = proc_queue[queue][i];
+    if (q->pid == p->pid)
+    {
+      return;
+    }
+  }
+  cprintf("adding to queue %d process with pid %d\n", queue, p->pid);
+  //doesn't exist so add to the queue
+  proc_queue[queue][tail[queue]] = p;
+  p->queue = queue;
+  tail[queue]++;
+}
+
+void remove_from_queue(int queue, struct proc *p)
+{
+  //get index of process
+  int i = 0;
+  for (; i < tail[queue]; i++)
+  {
+    struct proc *q = proc_queue[queue][i];
+    if (q->pid == p->pid)
+    {
+      break;
+    }
+  }
+  //if process is not found
+  if (i == tail[queue])
+    return;
+  cprintf("removing from queue %d process with pid %d\n", queue, p->pid);
+  //if process if found shift all process in front back by 1
+  for (int j = i; j < tail[queue]; j++)
+  {
+    proc_queue[queue][j] = proc_queue[queue][j + 1];
+  }
+  tail[queue]--;
+}
 
 static struct proc *initproc;
 
@@ -31,12 +70,6 @@ static void wakeup1(void *chan);
 void pinit(void)
 {
   initlock(&ptable.lock, "ptable");
-  for (int i = 0; i < 5; i++)
-  {
-    char lock_name[12] = "proc_queue";
-    lock_name[10] = i + '0';
-    initlock(&proc_queue[i].lock, lock_name);
-  }
 }
 
 // Must be called with interrupts disabled
@@ -103,6 +136,7 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->queue = 0;
 
   release(&ptable.lock);
 
@@ -135,14 +169,12 @@ found:
   p->rtime = 0;
   p->iotime = 0;
   p->priority = 60;
-  p->queue = 0;
-  // #ifdef MLFQ
-  //add to the end of queue 0
-  acquire(&proc_queue[0].lock);
-  proc_queue[0].proc[tail[0]] = *p;
-  tail[0]++;
-  release(&proc_queue[0].lock);
-  // #endif
+  for (int i = 0; i < 5; i++)
+    p->ticksinq[i] = 0;
+  p->lcheck = ticks;
+#ifdef MLFQ
+  add_to_queue(0, p);
+#endif
   return p;
 }
 
@@ -177,15 +209,8 @@ void userinit(void)
   // writes to be visible, and the lock is also needed
   // because the assignment might not be atomic.
   acquire(&ptable.lock);
-
   p->state = RUNNABLE;
-
   release(&ptable.lock);
-
-  acquire(&proc_queue[0].lock);
-  proc_queue[0].proc[tail[0]] = *p;
-  tail[0]++;
-  release(&proc_queue[0].lock);
 }
 
 // Grow current process's memory by n bytes.
@@ -253,13 +278,11 @@ int fork(void)
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
+#ifdef MLFQ
+  add_to_queue(0, np);
+#endif
 
   release(&ptable.lock);
-
-  acquire(&proc_queue[0].lock);
-  proc_queue[0].proc[tail[0]] = *np;
-  tail[0]++;
-  release(&proc_queue[0].lock);
 
   return pid;
 }
@@ -270,7 +293,7 @@ int fork(void)
 void exit(void)
 {
   struct proc *curproc = myproc();
-  cprintf("CURPROC IS %s\n", curproc->name);
+  // cprintf("CURPROC IS %s\n", curproc->name);
   struct proc *p;
   int fd;
 
@@ -291,30 +314,12 @@ void exit(void)
   iput(curproc->cwd);
   end_op();
   curproc->cwd = 0;
-
   acquire(&ptable.lock);
 
   // Parent might be sleeping in wait().
-  cprintf("Ye kyu hi hoega abhi\n");
+  // cprintf("Ye kyu hi hoega abhi\n");
   wakeup1(curproc->parent);
   // Pass abandoned children to init.
-#ifdef MLFQ
-  for (int i = 0; i < 5; i++)
-  {
-    for (p = proc_queue[i].proc; p < &proc_queue[i].proc[NPROC]; p++)
-    {
-      if (p->parent == curproc)
-      {
-        p->parent = initproc;
-        if (p->state == ZOMBIE)
-        {
-          cprintf("dsijdasidjsao\n");
-          wakeup1(initproc);
-        }
-      }
-    }
-  }
-#else
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
   {
     if (p->parent == curproc)
@@ -322,12 +327,11 @@ void exit(void)
       p->parent = initproc;
       if (p->state == ZOMBIE)
       {
-        cprintf("dsijdasidjsao\n");
+        // cprintf("dsijdasidjsao\n");
         wakeup1(initproc);
       }
     }
   }
-#endif
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
   acquire(&tickslock);
@@ -367,7 +371,9 @@ int wait(void)
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
+        remove_from_queue(p->queue, p);
         p->queue = -1;
+
         p->state = UNUSED;
         release(&ptable.lock);
         return pid;
@@ -504,6 +510,7 @@ void scheduler(void)
   struct proc *p;
   struct cpu *cpu = mycpu();
   cpu->proc = 0;
+  int cnt=0;
   for (;;)
   {
     // Enable interrupts on this processor.
@@ -602,61 +609,58 @@ void scheduler(void)
     }
 #else
 #ifdef MLFQ
-    int cur_table = -1;
-    for (int j = 0; j < 5; j++)
+
+    int curqueue = -1;
+    for (int i = 0; i < 5; i++)
     {
-      int proc_found = 0;
-      acquire(&proc_queue[j].lock);
-      if (j == 0)
-        for (p = proc_queue[j].proc; p < &proc_queue[j].proc[NPROC]; p++)
-        {
-          // cprintf("State of process with pid %d is %d at queue %d\n", p->pid, p->state, p->queue);
-          if (p->state != RUNNABLE || p->queue == -1)
-          {
-            // if (p->state==3)
-            // cprintf("IDHAR KYU BC\n");
-            continue;
-          }
-          else
-          {
-            // cprintf("Process found has pid %d\n",p->pid);
-            cur_table = j;
-            proc_found = 1;
-            break;
-          }
-        }
-      release(&proc_queue[j].lock);
-      if (proc_found == 1)
+      if (tail[i] > 0)
       {
-        cprintf("PROC FOUND\n");
+        curqueue = i;
         break;
       }
     }
-    int index = 0;
-    for (p = proc_queue[cur_table].proc; p < &proc_queue[cur_table].proc[NPROC]; p++)
+    if (curqueue == -1)
     {
-      if (p->state != RUNNABLE)
-        continue;
-
-      index++;
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      // cprintf("Index is %d\n",index);
-      cprintf("process to run found with pid %d\n",p->pid);
+      cnt++;
+      if  (cnt<20)
+      cprintf("All tables empty\n");
+      release(&ptable.lock);
+      continue;
+    }
+    p = proc_queue[curqueue][0];
+    p->lcheck = ticks;
+    remove_from_queue(curqueue, p);
+    while (1)
+    {
       cpu->proc = p;
       switchuvm(p);
       p->state = RUNNING;
       swtch(&cpu->scheduler, p->context);
       switchkvm();
-      cprintf("IDHAR REEEE\n");
-      cprintf("Process is now in state %d\n",p->state);
-      if (p->state == ZOMBIE) cprintf("PROCESS FINISHED\n");
-      // cprintf("process to run found with pid %d\n",p->pid);
-
+      cpu->proc = 0;
+      if (p->state == RUNNABLE && p->demote == 1)
+      {
+        p->lcheck = ticks;
+        cprintf("DEMOTING PROCESS WITH PID %d\n", p->pid);
+        if (curqueue == 4)
+          add_to_queue(4, p);
+        else
+        {
+          add_to_queue(curqueue + 1, p);
+        }
+        break;
+      }
+      else if (p->state == RUNNABLE && p->demote == 0)
+      {
+        continue;
+      }
+      else if (p->state == SLEEPING)
+      {
+        cprintf("HERE\n");
+        break;
+      }
       // Process is done running for now.
       // It should have changed its p->state before coming back.
-      cpu->proc = 0;
     }
     // if (index != 0)
     // cprintf("\n");
@@ -664,7 +668,6 @@ void scheduler(void)
 #endif
 #endif
 #endif
-
     release(&ptable.lock);
   }
 }
@@ -697,8 +700,10 @@ void sched(void)
 // Give up the CPU for one scheduling round.
 void yield(void)
 {
+  // cprintf("Inside yield\n");
   acquire(&ptable.lock); //DOC: yieldlock
-  myproc()->state = RUNNABLE;
+  struct proc *p = myproc();
+  p->state = RUNNABLE;
   sched();
   release(&ptable.lock);
 }
@@ -729,6 +734,7 @@ void forkret(void)
 void sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
+  // cprintf("CAME HERE\n");
 
   if (p == 0)
     panic("sleep");
@@ -749,8 +755,11 @@ void sleep(void *chan, struct spinlock *lk)
   }
   // Go to sleep.
   p->chan = chan;
+  // cprintf("changed to sleeping\n");
   p->state = SLEEPING;
-
+#ifdef MLFQ
+  remove_from_queue(p->queue, p);
+#endif
   sched();
 
   // Tidy up.
@@ -771,18 +780,13 @@ static void
 wakeup1(void *chan)
 {
   struct proc *p;
-#ifdef MLFQ
-  for (int i = 0; i < 5; i++)
-  {
-    for (p = proc_queue[i].proc; p < &proc_queue[i].proc[NPROC]; p++)
-      if (p->state == SLEEPING && p->chan == chan)
-        p->state = RUNNABLE;
-  }
-#else
+
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if (p->state == SLEEPING && p->chan == chan)
+    {
+      add_to_queue(p->queue, p);
       p->state = RUNNABLE;
-#endif
+    }
 }
 // Wake up all processes sleeping on chan.
 void wakeup(void *chan)
@@ -807,7 +811,10 @@ int kill(int pid)
       p->killed = 1;
       // Wake process from sleep if necessary.
       if (p->state == SLEEPING)
+      {
         p->state = RUNNABLE;
+        add_to_queue(0, p);
+      }
       release(&ptable.lock);
       return 0;
     }

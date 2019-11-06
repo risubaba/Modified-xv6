@@ -57,6 +57,9 @@ struct proc {
   int iotime;                 // Time for i/o 
   int priority;
   int queue;
+  int ticksinq[5];
+  int lcheck;
+  int demote;
 };
 
 // Process memory is laid out contiguously, low addresses first:
