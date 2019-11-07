@@ -29,11 +29,12 @@ void pinit(void)
 
 void add_to_queue(int queue, struct proc *p)
 {
-  for (int i=ptable.head[queue];i!=ptable.tail[queue];i = (i+1)%NPROC)
+  for (int i = ptable.head[queue]; i != ptable.tail[queue]; i = (i + 1) % NPROC)
   {
-    if (ptable.proc_queue[queue][i]->pid==p->pid)
+    if (ptable.proc_queue[queue][i]->pid == p->pid)
       return;
   }
+  p->queue = queue;
   ptable.proc_queue[queue][ptable.tail[queue]] = p;
   ptable.tail[queue] = (ptable.tail[queue] + 1) % NPROC;
   // cprintf("Adding proc with pid %d to queue %d\n",p->pid,queue);
@@ -516,12 +517,12 @@ void scheduler(void)
         ptable.head[curqueue] = (ptable.head[curqueue] + 1) % NPROC;
         // cprintf("HRERE %d\n",p->pid);
         // cprintf("%d\n",p->queue);
-        if (p==0 || p->queue != curqueue || p->state != RUNNABLE)
+        if (p == 0 || p->queue != curqueue || p->state != RUNNABLE)
           continue;
         // cprintf("Running proc with pid %d\n",p->pid);
         p->num_run++;
-        p->choosetime=ticks;
-        cprintf("Process with pid %d and state %d chosen at time %d from queue %d at index %d\n",p->pid,p->state,p->choosetime,p->queue,i);
+        p->choosetime = ticks;
+        cprintf("Process with pid %d and state %d chosen at time %d from queue %d at index %d\n", p->pid, p->state, p->choosetime, p->queue, i);
         cpu->proc = p;
         switchuvm(p);
         p->state = RUNNING;
@@ -563,10 +564,14 @@ void yield(void)
   struct proc *p = myproc();
   p->state = RUNNABLE;
 #ifdef MLFQ
-  if (p->queue != 4)
-    p->queue++;
-  cprintf("Demoting process with pid %d to queue %d\n",p->pid,p->queue);
-  add_to_queue(p->queue, p);
+  if (p->demote == 1)
+  {
+    if (p->queue != 4)
+      p->queue++;
+    cprintf("Demoting process with pid %d to queue %d\n", p->pid, p->queue);
+    add_to_queue(p->queue, p);
+  }
+  cprintf("p->queue for process with pid %d is %d\n",p->pid,p->queue);
 #endif
   sched();
   release(&ptable.lock);
