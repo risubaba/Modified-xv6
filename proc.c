@@ -13,17 +13,30 @@ struct
   struct spinlock lock;
   struct proc proc[NPROC];
   struct proc *proc_queue[5][NPROC];
+  int tail[5];
+  int head[5];
 } ptable;
 
 int ticksforqq[5] = {1, 2, 4, 8, 16};
 //MLFQ FUNCTIONS
-int tail[5];
 
 void pinit(void)
 {
   initlock(&ptable.lock, "ptable");
   for (int i = 0; i < 5; i++)
-    tail[i] = 0;
+    ptable.head[i] = ptable.tail[i] = 0;
+}
+
+void add_to_queue(int queue, struct proc *p)
+{
+  for (int i=ptable.head[queue];i!=ptable.tail[queue];i = (i+1)%NPROC)
+  {
+    if (ptable.proc_queue[queue][i]->pid==p->pid)
+      return;
+  }
+  ptable.proc_queue[queue][ptable.tail[queue]] = p;
+  ptable.tail[queue] = (ptable.tail[queue] + 1) % NPROC;
+  // cprintf("Adding proc with pid %d to queue %d\n",p->pid,queue);
 }
 
 static struct proc *initproc;
@@ -107,6 +120,7 @@ found:
   p->context->eip = (uint)forkret;
   acquire(&tickslock);
   p->ctime = ticks;
+  p->lcheck = ticks;
   release(&tickslock);
   p->etime = 0;
   p->rtime = 0;
@@ -114,7 +128,6 @@ found:
   p->priority = 60;
   for (int i = 0; i < 5; i++)
     p->ticksinq[i] = 0;
-  p->lcheck = 0;
   return p;
 }
 
@@ -143,6 +156,9 @@ void userinit(void)
   p->cwd = namei("/");
 
   acquire(&ptable.lock);
+#ifdef MLFQ
+  add_to_queue(0, p);
+#endif
   p->state = RUNNABLE;
   release(&ptable.lock);
 }
@@ -203,9 +219,10 @@ int fork(void)
 
   acquire(&ptable.lock);
 
+#ifdef MLFQ
+  add_to_queue(0, np);
+#endif
   np->state = RUNNABLE;
-
-
   release(&ptable.lock);
 
   return pid;
@@ -486,6 +503,35 @@ void scheduler(void)
       cpu->proc = 0;
     }
 #else
+#ifdef MLFQ
+    int curqueue = 0;
+    // cprintf("MLFQ\n");
+    for (; curqueue < 5; curqueue++)
+    {
+
+      // cprintf("head %d tail %d for queue %d\n",ptable.head[curqueue],ptable.tail[curqueue],curqueue);
+      for (int i = ptable.head[curqueue]; i != ptable.tail[curqueue]; i = (i + 1) % NPROC)
+      {
+        p = ptable.proc_queue[curqueue][i];
+        ptable.head[curqueue] = (ptable.head[curqueue] + 1) % NPROC;
+        // cprintf("HRERE %d\n",p->pid);
+        // cprintf("%d\n",p->queue);
+        if (p==0 || p->queue != curqueue || p->state != RUNNABLE)
+          continue;
+        // cprintf("Running proc with pid %d\n",p->pid);
+        p->num_run++;
+        p->choosetime=ticks;
+        cprintf("Process with pid %d and state %d chosen at time %d from queue %d at index %d\n",p->pid,p->state,p->choosetime,p->queue,i);
+        cpu->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
+        swtch(&(cpu->scheduler), p->context);
+        switchkvm();
+        cpu->proc = 0;
+        curqueue = 0;
+      }
+    }
+#endif
 #endif
 #endif
 #endif
@@ -516,7 +562,12 @@ void yield(void)
   acquire(&ptable.lock); //DOC: yieldlock
   struct proc *p = myproc();
   p->state = RUNNABLE;
-  p->demote = 1;
+#ifdef MLFQ
+  if (p->queue != 4)
+    p->queue++;
+  cprintf("Demoting process with pid %d to queue %d\n",p->pid,p->queue);
+  add_to_queue(p->queue, p);
+#endif
   sched();
   release(&ptable.lock);
 }
@@ -532,7 +583,6 @@ void forkret(void)
     iinit(ROOTDEV);
     initlog(ROOTDEV);
   }
-
 }
 
 void sleep(void *chan, struct spinlock *lk)
@@ -568,6 +618,9 @@ wakeup1(void *chan)
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if (p->state == SLEEPING && p->chan == chan)
     {
+#ifdef MLFQ
+      add_to_queue(p->queue, p);
+#endif
       p->state = RUNNABLE;
     }
 }
@@ -589,6 +642,9 @@ int kill(int pid)
       p->killed = 1;
       if (p->state == SLEEPING)
       {
+#ifdef MLFQ
+        add_to_queue(p->queue, p);
+#endif
         p->state = RUNNABLE;
       }
       release(&ptable.lock);

@@ -126,16 +126,22 @@ void trap(struct trapframe *tf)
   if (myproc() && myproc()->state == RUNNING &&
       tf->trapno == T_IRQ0 + IRQ_TIMER)
   {
+
 #ifdef FCFS
 #else
 #ifdef MLFQ
     struct proc *p = myproc();
-    p->ticksinq[p->queue]++;
-    if (ticks - p->lcheck >= ticksforq[p->queue])
-    {
-      p->demote = 1;
-    }
-    yield();
+    // if (ticks - p->lcheck >= 50)
+    // {
+    //   p->lcheck = ticks;
+    //   cprintf("Boosting process with pid %d to queue 0\n",p->pid);
+    //   add_to_queue(0, p);
+    //   return ;
+    // }
+
+    // cprintf("For pid %d ticks %d choosetime %d ticksforq %d\n",p->pid,ticks,p->choosetime,ticksforq[p->queue]);
+    if (ticks - p->choosetime >= ticksforq[p->queue])
+      yield();
 
 #else
     yield();

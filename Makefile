@@ -187,6 +187,7 @@ UPROGS=\
 	_wc\
 	_zombie\
 	_waitx_test\
+	_sleep\
 	_ps\
 
 fs.img: mkfs README $(UPROGS)
