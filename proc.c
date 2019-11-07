@@ -6,6 +6,7 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "pstat.h"
 
 //same lock for everything
 struct
@@ -99,6 +100,7 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
   p->queue = 0;
+  cprintf("Process with pid %d created\n",p->pid);
 
   release(&ptable.lock);
 
@@ -127,6 +129,7 @@ found:
   p->rtime = 0;
   p->iotime = 0;
   p->priority = 60;
+  p->num_run = 0;
   for (int i = 0; i < 5; i++)
     p->ticksinq[i] = 0;
   return p;
@@ -316,6 +319,30 @@ int wait(void)
   }
 }
 
+int getpinfo(struct proc_stat *p, int pid)
+{
+  struct proc *q;
+  acquire(&ptable.lock);
+  for (q = ptable.proc; q < &ptable.proc[NPROC]; q++)
+  {
+    if (q->pid == pid)
+    {
+      p->pid = pid;
+      p->runtime = q->rtime;
+      cprintf("Queue is %d\n",q->queue);
+      p->current_queue = q->queue;
+      p->num_run = q->num_run;
+      for (int i = 0; i < 5; i++)
+        p->ticks[i] = q->ticksinq[i];
+      release(&ptable.lock);
+      return 1;
+    }
+  }
+  release(&ptable.lock);
+
+  return 0;
+}
+
 int waitx(int *wtime, int *rtime)
 {
   struct proc *p;
@@ -346,7 +373,7 @@ int waitx(int *wtime, int *rtime)
         p->state = UNUSED;
         p->etime = 0;
         p->ctime = 0;
-        p->rtime = 0;
+        // p->rtime = 0;
         p->iotime = 0;
         p->queue = -1;
         release(&ptable.lock);
@@ -356,7 +383,7 @@ int waitx(int *wtime, int *rtime)
 
     if (!havekids || curproc->killed)
     {
-      *rtime = 0, *wtime = 0;
+      // *rtime = 0, *wtime = 0;
       release(&ptable.lock);
       return -1;
     }
@@ -408,8 +435,8 @@ int ps(void)
   cprintf("\n\nPID     NAME     STATE     PRIORITY \n");
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
   {
-    if (p->pid != 0)
-      ;
+    if (p->pid == 0)
+      continue;
     cprintf(" %d     %s     %s     %d\n", p->pid, p->name, val(p->state), p->priority);
   }
   cprintf("\n\n");
@@ -522,7 +549,7 @@ void scheduler(void)
         // cprintf("Running proc with pid %d\n",p->pid);
         p->num_run++;
         p->choosetime = ticks;
-        cprintf("Process with pid %d and state %d chosen at time %d from queue %d at index %d\n", p->pid, p->state, p->choosetime, p->queue, i);
+        // cprintf("Process with pid %d and state %d chosen at time %d from queue %d at index %d\n", p->pid, p->state, p->choosetime, p->queue, i);
         cpu->proc = p;
         switchuvm(p);
         p->state = RUNNING;
@@ -568,10 +595,10 @@ void yield(void)
   {
     if (p->queue != 4)
       p->queue++;
-    cprintf("Demoting process with pid %d to queue %d\n", p->pid, p->queue);
+    // cprintf("Demoting process with pid %d to queue %d\n", p->pid, p->queue);
     add_to_queue(p->queue, p);
   }
-  cprintf("p->queue for process with pid %d is %d\n",p->pid,p->queue);
+  // cprintf("p->queue for process with pid %d is %d\n", p->pid, p->queue);
 #endif
   sched();
   release(&ptable.lock);

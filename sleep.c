@@ -5,7 +5,7 @@
 int main(int argc,char *argvs[])
 {
     int ttime = atoi(argvs[1]);
-    for (volatile int i=0;i<ttime * 10000000;i++)
+    for (volatile long long int i=0;i<ttime * 10000000;i++)
     {
         i++;
         i--;

@@ -1,6 +1,6 @@
 struct stat;
 struct rtcdate;
-
+struct proc_stat;
 // system calls
 int fork(void);
 int exit(void) __attribute__((noreturn));
@@ -24,6 +24,7 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int waitx(int *,int *);
+int getpinfo(struct proc_stat*,int);
 int set_priority(int);
 int ps(void);
 

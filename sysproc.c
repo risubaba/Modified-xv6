@@ -90,7 +90,6 @@ int sys_set_priority(void)
   if (argint(0, &priority) < 0)
     return -1;
   return set_priority(priority);
-
 }
 
 int sys_ps(void)
@@ -108,4 +107,16 @@ int sys_waitx(void)
   if (argptr(1, (char **)&rtime, sizeof(int)) < 0)
     return -1;
   return waitx(wtime, rtime);
+}
+
+int sys_getpinfo(void)
+{
+  int pid;
+  struct proc_stat *p;
+  if (argptr(0, (char **)&p, sizeof(p)) < 0)
+    return -1;
+  if (argint(1, &pid) < 0)
+    return -1;
+  cprintf("+++++++++++++++++++++++++ %d +++++++++++++++++++\n",pid);
+  return getpinfo(p,pid);
 }
