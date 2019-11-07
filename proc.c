@@ -272,6 +272,7 @@ void exit(void)
   curproc->state = ZOMBIE;
   acquire(&tickslock);
   curproc->etime = ticks;
+  cprintf("Time taken by process to run was %d\n", curproc->etime - curproc->ctime);
   release(&tickslock);
   sched();
   panic("zombie exit");
@@ -406,6 +407,7 @@ int set_priority(int priority)
   p->priority = priority;
   if (ret > p->priority)
     yield_flag = 1;
+  cprintf("Priority changed from %d to %d\n",ret,p->priority);
   release(&ptable.lock);
   if (yield_flag)
   {
@@ -513,12 +515,17 @@ void scheduler(void)
       {
         max_priority = max_priority < p->priority ? max_priority : p->priority;
       }
+      // cprintf("Process with pid %d has state %d and priority %d\n",p->pid,p->state,p->priority);
     }
+    // cprintf("Max priority should be %d\n", max_priority);
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
       int flag = 0;
-      for (struct proc *q = ptable.proc; p < &ptable.proc[NPROC]; p++)
+      for (struct proc *q = ptable.proc; q < &ptable.proc[NPROC]; q++)
       {
+        // cprintf("Process with pid %d has state %d and priority %d\n",q->pid,q->state,q->priority);
+        if (q->state != RUNNABLE)
+          continue;
         if (q->priority < max_priority)
         {
           flag = 1;
@@ -527,8 +534,9 @@ void scheduler(void)
       }
       if (flag)
         break;
+      // cprintf("HERERE\n");
       if (p->state != RUNNABLE || p->priority != max_priority)
-        continue;
+      continue;
 
       // cprintf("max_priority chosen is %d with pid %d\n", max_priority, p->pid);
       cpu->proc = p;
@@ -545,19 +553,19 @@ void scheduler(void)
     int curqueue = 0;
     // cprintf("MLFQ\n");
     // acquire(&tickslock);
-    for (; curqueue < 5; curqueue++)
+    for (curqueue = 1; curqueue < 5; curqueue++)
     {
       for (int i = ptable.head[curqueue]; i != ptable.tail[curqueue]; i = (i + 1) % NPROC)
       {
         p = ptable.proc_queue[curqueue][i];
         if (p == 0 || p->queue != curqueue || p->state != RUNNABLE)
           continue;
-        if (ticks - p->choosetime > 100)
+        if (ticks - p->choosetime > 150)
         {
           p->choosetime = ticks;
-          add_to_queue(0, p);
-          p->queue = 0;
-          cprintf("Boosting process with pid %d at %d\n", p->pid, ticks);
+          add_to_queue(curqueue - 1, p);
+          p->queue = curqueue - 1;
+          // cprintf("Boosting process with pid %d at %d\n", p->pid, ticks);
         }
       }
     }
@@ -566,16 +574,12 @@ void scheduler(void)
     for (; curqueue < 5; curqueue++)
     {
 
-      // cprintf("head %d tail %d for queue %d\n",ptable.head[curqueue],ptable.tail[curqueue],curqueue);
       for (int i = ptable.head[curqueue]; i != ptable.tail[curqueue]; i = (i + 1) % NPROC)
       {
         p = ptable.proc_queue[curqueue][i];
         ptable.head[curqueue] = (ptable.head[curqueue] + 1) % NPROC;
-        // cprintf("HRERE %d\n",p->pid);
-        // cprintf("%d\n",p->queue);
         if (p == 0 || p->queue != curqueue || p->state != RUNNABLE)
           continue;
-        // cprintf("Running proc with pid %d\n",p->pid);
         p->num_run++;
         p->choosetime = ticks;
         // cprintf("Process with pid %d and state %d chosen at time %d from queue %d at index %d\n", p->pid, p->state, p->choosetime, p->queue, i);
@@ -585,7 +589,6 @@ void scheduler(void)
         swtch(&(cpu->scheduler), p->context);
         switchkvm();
         cpu->proc = 0;
-        // cprintf("GOING TO NEXTPROC\n");
         goto NEXTPROC;
       }
     }

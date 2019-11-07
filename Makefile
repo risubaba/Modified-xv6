@@ -190,6 +190,8 @@ UPROGS=\
 	_sleep\
 	_getpinfo\
 	_ps\
+	_benchmark\
+	_pbs_test\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)

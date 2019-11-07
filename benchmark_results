@@ -1,0 +1,10 @@
+DEFAULT : 1812 ticks
+FCFS : 2297 ticks
+PBS : 1805 ticks
+MLFQ : 1814  ticks
+
+
+DEFAULT : 18012 ticks
+FCFS : 22342 ticks
+PBS : 18006 ticks
+MLFQ : 18015 ticks

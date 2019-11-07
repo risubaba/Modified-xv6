@@ -4,6 +4,7 @@
 
 int main(int argc, char *argv[])
 {
+    set_priority(1);
     ps();
     exit();
 
