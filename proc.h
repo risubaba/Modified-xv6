@@ -62,6 +62,7 @@ struct proc {
   int demote;
   int num_run;
   int choosetime;
+  int priorityflag;
 };
 
 // Process memory is laid out contiguously, low addresses first:

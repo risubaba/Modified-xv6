@@ -132,15 +132,6 @@ void trap(struct trapframe *tf)
 #ifdef MLFQ
     struct proc *p = myproc();
     p->ticksinq[p->queue]++;
-    if (ticks - p->lcheck >= 50)
-    {
-      p->lcheck = ticks;
-      // cprintf("Boosting process with pid %d to queue 0\n", p->pid);
-      add_to_queue(0, p);
-      p->queue = 0;
-      p->demote = 0;
-      yield();
-    }
 
     // cprintf("For pid %d ticks %d choosetime %d ticksforq %d\n",p->pid,ticks,p->choosetime,ticksforq[p->queue]);
     if (ticks - p->choosetime >= ticksforq[p->queue])

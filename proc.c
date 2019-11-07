@@ -100,7 +100,7 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
   p->queue = 0;
-  cprintf("Process with pid %d created\n",p->pid);
+  cprintf("Process with pid %d created at %d\n", p->pid, ticks);
 
   release(&ptable.lock);
 
@@ -123,13 +123,14 @@ found:
   p->context->eip = (uint)forkret;
   acquire(&tickslock);
   p->ctime = ticks;
-  p->lcheck = ticks;
+  p->choosetime = ticks;
   release(&tickslock);
   p->etime = 0;
   p->rtime = 0;
   p->iotime = 0;
   p->priority = 60;
   p->num_run = 0;
+  p->priorityflag = 0;
   for (int i = 0; i < 5; i++)
     p->ticksinq[i] = 0;
   return p;
@@ -329,7 +330,7 @@ int getpinfo(struct proc_stat *p, int pid)
     {
       p->pid = pid;
       p->runtime = q->rtime;
-      cprintf("Queue is %d\n",q->queue);
+      cprintf("Queue is %d\n", q->queue);
       p->current_queue = q->queue;
       p->num_run = q->num_run;
       for (int i = 0; i < 5; i++)
@@ -394,6 +395,10 @@ int waitx(int *wtime, int *rtime)
 
 int set_priority(int priority)
 {
+  if (priority < 0 || priority > 100)
+  {
+    panic("Invalid priority assigned");
+  }
   int yield_flag = 0;
   struct proc *p = myproc();
   acquire(&ptable.lock);
@@ -511,6 +516,17 @@ void scheduler(void)
     }
     for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
+      int flag = 0;
+      for (struct proc *q = ptable.proc; p < &ptable.proc[NPROC]; p++)
+      {
+        if (q->priority < max_priority)
+        {
+          flag = 1;
+          break;
+        }
+      }
+      if (flag)
+        break;
       if (p->state != RUNNABLE || p->priority != max_priority)
         continue;
 
@@ -520,12 +536,6 @@ void scheduler(void)
       p->state = RUNNING;
       swtch(&cpu->scheduler, p->context);
       switchkvm();
-      if (p->state == RUNNABLE)
-      {
-        //   //proccess exited due to change in priority
-        //   //rerun the scheduler
-        break;
-      }
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       cpu->proc = 0;
@@ -534,6 +544,25 @@ void scheduler(void)
 #ifdef MLFQ
     int curqueue = 0;
     // cprintf("MLFQ\n");
+    // acquire(&tickslock);
+    for (; curqueue < 5; curqueue++)
+    {
+      for (int i = ptable.head[curqueue]; i != ptable.tail[curqueue]; i = (i + 1) % NPROC)
+      {
+        p = ptable.proc_queue[curqueue][i];
+        if (p == 0 || p->queue != curqueue || p->state != RUNNABLE)
+          continue;
+        if (ticks - p->choosetime > 100)
+        {
+          p->choosetime = ticks;
+          add_to_queue(0, p);
+          p->queue = 0;
+          cprintf("Boosting process with pid %d at %d\n", p->pid, ticks);
+        }
+      }
+    }
+    // release(&tickslock);
+    curqueue = 0;
     for (; curqueue < 5; curqueue++)
     {
 
@@ -556,9 +585,12 @@ void scheduler(void)
         swtch(&(cpu->scheduler), p->context);
         switchkvm();
         cpu->proc = 0;
-        curqueue = 0;
+        // cprintf("GOING TO NEXTPROC\n");
+        goto NEXTPROC;
       }
     }
+  NEXTPROC:
+
 #endif
 #endif
 #endif
